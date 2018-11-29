@@ -29,12 +29,12 @@ Identifying a plan for QS agent to reach one of the target states: QS agent simu
 ## Results
 We addressed QS agent’s performance compared to RL agents by using the “lunar-lander” benchmark task available in openAI gym environment. In this study, RL is a actor-critic model implemented with the pytorch, an open-source machine learning library; the reference implementation is part of the official pytorch release. Figures below show the total reward and the environment model error during 5000 episodes. 
 
-[figure1](figures/env.png)
-[figure2](figures/reward.png)
+[figure1](figures/env.png?raw=true)
+[figure2](figures/reward.png?raw=true)
 
 As shown in the figures, both reward and error improved rapidly only until 1000 episodes; afterwards they showed no significant improvements. Thus, we constructed QS agents after 1000 episodes and tested their performance to be compared to the original RL agent. For comparison, we frozen RL agents’ learning and measured the total rewards that both RL and QS agents obtained during 300 episodes. Before the first episode, the gym is initialized with the same random seed, and then the random seed was not reset afterwards. We also tested 10 different instantiations of QS and RL agents by feeding different random seeds into the pytorch. 
 
-[figure3](figures/test.png)
+[figure3](figures/test.png?raw=true)
 
 As seen in Figure above, QS agents’ performance shown in red is slightly better than that of RL agents shown in blue, suggesting that QS agents perform as good as or as bad as RL agents. In other words, based on RL agents’ learning, our experiments raised the possibility that a secondary agent, with transparent reasons behind actions, can be constructed.
 
