@@ -1,4 +1,4 @@
-### complementary reinforcement learning for explainable agents
+# complementary reinforcement learning for explainable agents
 
 ## Backgrounds
 
