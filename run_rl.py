@@ -3,17 +3,15 @@ import gym
 import numpy as np
 from itertools import count
 from collections import Counter, defaultdict, namedtuple
-from func_export import *
+from function import *
 import pylab
 import json
-import pickle
+import time
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-
-
 from torch.distributions import Categorical
 
 '''
@@ -23,26 +21,33 @@ This script is derived from an example included in the pytorch distribution.
 '''
 
 
-parser = argparse.ArgumentParser(description='Complementary RL model')
+parser = argparse.ArgumentParser(description='PyTorch actor-critic example')
 
-parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
-                    help='discount factor (default: 0.99)')
+parser.add_argument('--seed', type=int, default=9999, metavar='N',
+                    help='random seed (default: 9999)')
 
-parser.add_argument('--seed', type=int, default=1, metavar='N',
-                    help='random seed (default: 1)')
+parser.add_argument('--torch_seed', type=int, default=500, metavar='N',
+                    help='random seed (default: 500)')
 
-parser.add_argument('--simlength', type=int, default=1000, metavar='N',
-                    help='number of simulation step (default: 1000)')
-parser.add_argument('--good', type=float, default=100, metavar='N',
-                    help='the minimal reward for memorizaton')
+parser.add_argument('--start', type=int, default=1000, metavar='N',
+                    help='load the model (default: 10)')
+
+parser.add_argument('--test', type=int, default=10, metavar='N',
+                    help='number of trials (default: 10)')
+
 args = parser.parse_args()
 
 
 env = gym.make('LunarLander-v2')
 env.seed(args.seed)
-torch.manual_seed(args.seed)
+torch.manual_seed(args.torch_seed)
 
-D_agent=eval_states(8)
+
+
+ext=str(args.start)
+test_length=args.test
+
+#D_agent=eval_states(8)
 
 SavedAction = namedtuple('SavedAction', ['log_prob', 'value'])
 
@@ -86,15 +91,10 @@ class Single(nn.Module):
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model = Policy().to(device)
-#model=model.cuda()
-#model.to(device)
-optimizer = optim.Adam(model.parameters(), lr=3e-2)
-eps = np.finfo(np.float32).eps.item()
 fake_env=Mod_env().to(device)
-#fake_env=fake_env.cuda()
-#fake_env.to(device)
-loss_explicit= nn.MSELoss()
-optimizer_explicit = optim.SGD(fake_env.parameters(), lr=5e-2)
+
+model.load_state_dict(torch.load('data/model_'+ext))
+fake_env.load_state_dict(torch.load('data/fake_env_'+ext))
 
 def select_action(state,store=True):
     state = torch.from_numpy(state).float()
@@ -107,7 +107,7 @@ def select_action(state,store=True):
     action = m.sample()
     if store:
         model.saved_actions.append(SavedAction(m.log_prob(action), state_value))
-    return action.item()
+    return action.item(), state_value
 
 
 def finish_episode():
@@ -166,14 +166,15 @@ def train_mod_env(local_state,local_action):
 def speculate(state, targets, prev_node,test_net, length=10):
     plan=[]
     plan_flag=False
-   
+    plan_blind=[]
     #print ('target',targets)
     #state=D_agent.mem[state]
 
     with torch.no_grad():
         for l in range(length):  # Don't infinite loop while learning
             #print (state)
-            action = select_action(state,store=False)
+            action, st = select_action(state,store=False)
+            plan_blind.append(action)
             temp=np.zeros(4)
             temp[action]=1
             input_i=np.hstack((state,temp))
@@ -190,7 +191,7 @@ def speculate(state, targets, prev_node,test_net, length=10):
                 state_n=indices
             else:
                 state_n=-99
-        
+            
 
             if state_n!=prev_node:
 
@@ -203,79 +204,85 @@ def speculate(state, targets, prev_node,test_net, length=10):
             state=state_f
 
         del outputs,values,indices, input_i,state_f,state,temp
-    return (plan_flag, plan)
+    #print ('plan in func',plan)
+    return (plan_flag, plan,st,plan_blind)
        
 
 def main():
     all_reward=[]
     env_errors=[]
     crash=[]
-    simlength=args.simlength
+    testlength=test_length
+    
+    
+    
+   
+
+    fp=open('data/path_'+ext+'.json','r')
+    pw3=json.load(fp)
+    fp.close()
+
+    fp=open('data/freq_'+ext+'.json','r')
+    pw2=json.load(fp)
+    fp.close() 
+    
+    pw1=np.load('data/memory_'+ext+'.npy')
 
     
+    #D_agent.import_net(pw1,pw2,pw3)
+    del pw1,pw2,pw3
 
-    for i_episode in range(simlength):
+
+
+
+
+    #paths=path_net(D_agent)
+    #paths.make_net()
+    #n_nodes=D_agent.pw1.shape[0]
+   # pw1=torch.Tensor(D_agent.pw1)
+    #test_net=Single(n_nodes)
+    #model_dict=test_net.state_dict()
+    #model_dict['affine1.weight']=pw1
+    #test_net.load_state_dict(model_dict)
+    #test_net.to(device)
+   
+
+
+    all_reward=list(all_reward)
+    for i_episode in range(testlength):
+        env.seed(args.seed*(i_episode+5))
         state = env.reset()
         running_reward=[]
-        local_state=[]
-        local_action=[]
-        for t in range(1000):  # Don't infinite loop while learning
-            action = select_action(state)
-            local_state.append(state)
-            local_action.append(action)
+        prev_node=-9999
+        for t in range(500):  # Don't infinite loop while learning
+            
+            with torch.no_grad():
+                action,_ = select_action(state,store=False)           
             state, reward, done, _ = env.step(action)
-            
-          
-
-
-            
-            model.rewards.append(reward)
             running_reward.append(reward)
-            if done:
-                all_reward.append(np.sum(np.array(running_reward)))
-                crash.append(reward)
-                print (i_episode, 'reward',all_reward[-1])
-                
-                if all_reward[-1]>=args.good:
-                    for st in local_state:
-                        D_agent.update(st)
-                    D_agent.reset()
-                break
-        finish_episode()
-        error_i=train_mod_env(local_state,local_action)
-        env_errors.append(error_i)
-        if (i_episode+1)%1000==0:
-            ext=str(i_episode+1)
-
-            fp=open('data/path_'+ext+'.json','w')
-            json.dump(D_agent.pw3,fp)
-            fp.close()
-
-
-            fp=open('data/freq_'+ext+'.json','w')
-            json.dump(D_agent.pw2,fp)
-            fp.close() 
-            
-            np.save('data/memory_'+ext,D_agent.pw1)
-            
-            for g in optimizer_explicit.param_groups:
-                g['lr'] = g['lr']*0.1
-
-            for g in optimizer.param_groups:
-                g['lr'] = g['lr']*0.1
-
-    
-
-            model_dict=model.state_dict()
-            fake_env_dict=fake_env.state_dict()
-            torch.save(model.state_dict(), 'data/model_'+ext)
-            torch.save(fake_env.state_dict(), 'data/fake_env_'+ext)
+            #env.render()
+            #time.sleep(0.02)
            
-    data={'reward':all_reward,'crash':crash,'env_error':env_errors}
-    fp=open('results_'+str(simlength)+'.json','w')
+            #print (t,state)
+         
+           
+            if done:
+                rw=np.array(running_reward)
+                all_reward.append(np.sum(rw))
+                crash.append(reward)
+                print (i_episode, np.sum(rw),state)
+                break
+        else: # else for for-loop.
+            rw=np.array(running_reward)
+            all_reward.append(np.sum(rw))
+            crash.append(reward)
+            print (i_episode, np.sum(rw),state)
+
+    data={'reward':all_reward,'crash':crash}
+    fp=open('results_ref'+ext+'_'+str(testlength)+'_'+str(args.torch_seed)+'.json','w')
     json.dump(data,fp)
-    fp.close()
-    
+    fp.close()       
+
         
 
 if __name__ == '__main__':

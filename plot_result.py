@@ -57,7 +57,9 @@ print ('ref crash',np.mean(np.array(cr_ref)))
 pylab.plot(exp_r,'r',label='exp')
 pylab.plot(exp_ref_r,'b',label='control')
 
+#pylab.plot(exp_r-exp_ref_r,'k',label='diff')
 
+print ('diff',np.mean(exp_r-exp_ref_r))
 pylab.legend()
 pylab.show()
 
