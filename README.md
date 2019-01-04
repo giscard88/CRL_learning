@@ -4,7 +4,7 @@
 
 Reinforcement learning (RL) algorithms allow agents to learn skills and strategies to perform complex tasks without detailed instructions or expensive labelled training examples. That is, RL agents can learn, as we learn. Given the importance of learning in our intelligence, RL has been thought to be one of key components to general artificial intelligence, and recent breakthroughs in deep reinforcement learning suggest that neural networks (NN) are natural platforms for RL agents. However, despite the efficiency and versatility of NN-based RL agents, their decision-making remains incomprehensible, reducing their utilities. To deploy RL into a wider range of applications, it is imperative to develop explainable NN-based RL agents. Here, we propose a method to derive a secondary comprehensible agent from a NN-based RL agent, whose decision-makings are based on simple rules. Our empirical evaluation of this secondary agent's performance supports the possibility of building a comprehensible and transparent agent using a NN-based RL agent.
 
-For detailed description, plase read a [preprint] (https://arxiv.org/abs/1901.00188). 
+For detailed description, plase read a [preprint](https://arxiv.org/abs/1901.00188). 
 
 ## Codes
 
