@@ -8,7 +8,7 @@ For detailed description, plase read a [preprint](https://arxiv.org/abs/1901.001
 
 ## Codes
 
-1. train_rl.py: it traines the RL agent (as well as QS agent) and saves them. 
+1. train_rl.py: it traines the RL agent (as well as QS agent) and saves it. 
 2. run_qs.py: it loads the RL agent saved and utilizes it to test QS agent's action.
 3. run_rl.py: it loads the RL agent saved and utlizes it to test the RL agent's performance.
 4. batch.sh: it produces results in a simulation condition.
