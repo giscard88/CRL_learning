@@ -17,7 +17,7 @@ For detailed description, plase read a [preprint](https://arxiv.org/abs/1901.001
 
 ## Dependency
 
-1. Pytorch
+1. Pytorch>0.4
 2. OpenAI gym
 3. numpy
 
