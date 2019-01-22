@@ -6,7 +6,6 @@ from collections import Counter, defaultdict, namedtuple
 from function import *
 import pylab
 import json
-import time
 
 import torch
 import torch.nn as nn
@@ -22,18 +21,23 @@ This script is derived from an example included in the pytorch distribution.
 
 
 parser = argparse.ArgumentParser(description='PyTorch actor-critic example')
+parser.add_argument('--rejection', type=int, default=10, metavar='N',
+                    help='maximal rejection (default: 10)')
 
 parser.add_argument('--seed', type=int, default=9999, metavar='N',
                     help='random seed (default: 9999)')
 
-parser.add_argument('--torch_seed', type=int, default=500, metavar='N',
-                    help='random seed (default: 500)')
+parser.add_argument('--search', type=int, default=10, metavar='N',
+                    help='length of plan (default: 10)')
 
 parser.add_argument('--start', type=int, default=1000, metavar='N',
                     help='load the model (default: 10)')
 
 parser.add_argument('--test', type=int, default=10, metavar='N',
                     help='number of trials (default: 10)')
+
+parser.add_argument('--torch_seed', type=int, default=500, metavar='N',
+                    help='number of trials (default: 500)')
 
 args = parser.parse_args()
 
@@ -42,12 +46,12 @@ env = gym.make('LunarLander-v2')
 env.seed(args.seed)
 torch.manual_seed(args.torch_seed)
 
-
-
+rejection=args.rejection
+search=args.search
 ext=str(args.start)
 test_length=args.test
 
-#D_agent=eval_states(8)
+D_agent=eval_states2(8)
 
 SavedAction = namedtuple('SavedAction', ['log_prob', 'value'])
 
@@ -98,7 +102,6 @@ fake_env.load_state_dict(torch.load('data/fake_env_'+ext))
 
 def select_action(state,store=True):
     state = torch.from_numpy(state).float()
-    #state=state.cuda()
     state=state.to(device)
     probs, state_value = model(state)
     probs=probs.cpu()
@@ -150,8 +153,7 @@ def train_mod_env(local_state,local_action):
 
     patterns=torch.Tensor(patterns)
     outputs_d=torch.Tensor(outputs_d)
-    #patterns=patterns.cuda()
-    #outputs_d=outputs_d.cuda()
+
     patterns=patterns.to(device)
     outputs_d=outputs_d.to(device)
     optimizer_explicit.zero_grad()
@@ -163,17 +165,22 @@ def train_mod_env(local_state,local_action):
     return le.item()
 
 
-def speculate(state, targets, prev_node,test_net, length=10):
+def speculate(state, targets, prev_node,test_net, paths, length=10):
     plan=[]
     plan_flag=False
     plan_blind=[]
     #print ('target',targets)
     #state=D_agent.mem[state]
+    st_=[]
 
+
+    prev_state=state
     with torch.no_grad():
+
         for l in range(length):  # Don't infinite loop while learning
-            #print (state)
+            
             action, st = select_action(state,store=False)
+
             plan_blind.append(action)
             temp=np.zeros(4)
             temp[action]=1
@@ -181,31 +188,33 @@ def speculate(state, targets, prev_node,test_net, length=10):
             outputs=fake_env(torch.Tensor(input_i).to(device))
 
             state_f=outputs.cpu().detach().numpy()
+            outputs=state_f-prev_state
+            outputs=torch.Tensor(outputs).to(device)
             outputs=outputs/torch.norm(outputs)
             outputs=test_net(outputs).cpu().detach()
             values, indices = torch.max(outputs,0)
             values=values.numpy()
             indices=indices.numpy()
 
-            if values>=D_agent.thres:
-                state_n=indices
-            else:
-                state_n=-99
-            
+            state_n=indices
+            st_.append(D_agent.pw2[indices])
+            #st_.append(paths.wts[indices,prev_node_i])
 
-            if state_n!=prev_node:
+       
 
-                plan.append(action)
-                if state_n in targets:
-                    plan_flag=True
-                    #print ('optimistic')
-                    break
-
+            if state_n in targets:
+                plan_flag=True
+                #print ('optimistic')
+                break
+            prev_state=state_f
             state=state_f
+        #print (st_)
+        #print (act_)
 
-        del outputs,values,indices, input_i,state_f,state,temp
-    #print ('plan in func',plan)
-    return (plan_flag, plan,st,plan_blind)
+
+
+
+    return (plan_flag,st_[0],plan_blind)
        
 
 def main():
@@ -228,23 +237,23 @@ def main():
     
     pw1=np.load('data/memory_'+ext+'.npy')
 
-    
-    #D_agent.import_net(pw1,pw2,pw3)
+    #D_agent=eval_states(8)
+    D_agent.import_net(pw1,pw2,pw3)
     del pw1,pw2,pw3
 
 
 
 
 
-    #paths=path_net(D_agent)
-    #paths.make_net()
-    #n_nodes=D_agent.pw1.shape[0]
-   # pw1=torch.Tensor(D_agent.pw1)
-    #test_net=Single(n_nodes)
-    #model_dict=test_net.state_dict()
-    #model_dict['affine1.weight']=pw1
-    #test_net.load_state_dict(model_dict)
-    #test_net.to(device)
+    paths=path_net(D_agent)
+    paths.make_net()
+    n_nodes=D_agent.pw1.shape[0]
+    pw1=torch.Tensor(D_agent.pw1)
+    test_net=Single(n_nodes)
+    model_dict=test_net.state_dict()
+    model_dict['affine1.weight']=pw1
+    test_net.load_state_dict(model_dict)
+    test_net.to(device)
    
 
 
@@ -254,18 +263,62 @@ def main():
         state = env.reset()
         running_reward=[]
         prev_node=-9999
-        for t in range(500):  # Don't infinite loop while learning
+
+        for t in range(1000):  # Don't infinite loop while learning
             
-            with torch.no_grad():
-                action,_ = select_action(state,store=False)           
-            state, reward, done, _ = env.step(action)
-            running_reward.append(reward)
-            #env.render()
-            #time.sleep(0.02)
-           
-            #print (t,state)
-         
-           
+            if t==0:
+                temp_state=np.zeros(8)
+            else:
+                temp_state=state-state_b
+            state_b=state        
+            target_states,flag=find_next_states4(D_agent,paths, temp_state)
+            prev_node=flag
+
+            # add a routine to find the targets here.
+            plan_all=[]
+            value_all=[] 
+            for s in range(rejection): # maxium number of rejection. If it takes too long, let's move on. 
+                #print (t,s)
+                ans=speculate(state, target_states,prev_node,test_net,paths,length=search)
+                plan_all.append(ans[2])
+                value_all.append(ans[1])
+
+                if ans[0]==True:
+                    break
+
+
+            if ans[0]==True:
+                #print (t, 'plan proceed',len(ans[2]))
+                #print (ans[1])
+                for xin in ans[2]: # the actions in the plan
+                    state, reward, done, _ = env.step(xin)
+                    running_reward.append(reward)
+                    #env.render()
+                    #print (xin, reward, done)
+                    if done:
+                        #print ('rw',reward)
+                        break
+
+            else:
+                value_all=np.array(value_all)
+                idx=np.argmax(value_all)
+               
+                #print (t, 'max',np.amax(value_all))
+                #print (value_all)
+                tmp_act=plan_all[idx][:1]
+                if not tmp_act:
+                    tmp_act=[np.random.randint(4)]
+                    print (t,'rand')
+                if np.amax(value_all)==-9999:
+                    tmp_act=[np.random.randint(4)]
+                    print (t,'rand')
+                state, reward, done, _ = env.step(tmp_act[0])
+                running_reward.append(reward)
+                #env.render()
+                #print (t, reward, done)
+
+            #print (t, done)
+            
             if done:
                 rw=np.array(running_reward)
                 all_reward.append(np.sum(rw))
@@ -279,7 +332,7 @@ def main():
             print (i_episode, np.sum(rw),state)
 
     data={'reward':all_reward,'crash':crash}
-    fp=open('results_ref'+ext+'_'+str(testlength)+'_'+str(args.torch_seed)+'.json','w')
+    fp=open('results_'+ext+'_'+str(testlength)+'_'+str(rejection)+'_'+str(search)+str(args.torch_seed)+'.json','w')
     json.dump(data,fp)
     fp.close()       
 
